@@ -873,7 +873,7 @@ def hook_status() -> None:
 
 @hook_group.command("enable")
 def hook_enable() -> None:
-    """Enable AI review for current repo (sets git config --local)."""
+    """Enable AI review for current repo (sets config + installs hooks)."""
     import subprocess
 
     try:
@@ -883,11 +883,37 @@ def hook_enable() -> None:
         console.print("[bold red]Not in a git repository.[/]")
         sys.exit(1)
 
+    # 1. Set git config flag
     subprocess.run(
         ["git", "config", "--local", "ai-review.enabled", "true"],
         check=True,
     )
     console.print("[green]AI review enabled for this repo.[/]")
+
+    # 2. Copy hook scripts into .git/hooks/ so they work immediately
+    hooks_dir = _get_repo_hooks_dir()
+    hook_scripts = _generate_template_hook_scripts()
+    installed = []
+    for hook_type, script in hook_scripts.items():
+        hook_path = hooks_dir / hook_type
+        if hook_path.exists():
+            # Skip if already installed by ai-review
+            try:
+                if "ai-review" in hook_path.read_text(encoding="utf-8"):
+                    continue
+            except (OSError, UnicodeDecodeError):
+                pass
+            # Skip if custom hook exists (don't overwrite user's hooks)
+            console.print(f"  [yellow]Skipped {hook_type}: existing hook found[/]")
+            continue
+        hook_path.write_text(script, encoding="utf-8")
+        hook_path.chmod(0o755)
+        installed.append(hook_type)
+
+    if installed:
+        console.print(f"  [green]Installed hooks: {', '.join(installed)}[/]")
+    else:
+        console.print("  [dim]All hooks already installed.[/]")
 
 
 @hook_group.command("disable")
