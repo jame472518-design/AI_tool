@@ -273,9 +273,11 @@ make_content_slide("目錄", [
     ("5.  安裝 Git Hooks", {"size": 20, "bold": True, "color": ACCENT}),
     ("6.  日常使用流程", {"size": 20, "bold": True, "color": ACCENT}),
     ("7.  互動式 Commit 助手", {"size": 20, "bold": True, "color": ACCENT}),
-    ("8.  常用指令速查表", {"size": 20, "bold": True, "color": ACCENT}),
-    ("9.  疑難排解", {"size": 20, "bold": True, "color": ACCENT}),
-    ("10. 完整移除", {"size": 20, "bold": True, "color": ACCENT}),
+    ("8.  使用情境", {"size": 20, "bold": True, "color": ACCENT}),
+    ("9.  更換/設定 LLM Model", {"size": 20, "bold": True, "color": ACCENT}),
+    ("10. 常用指令速查表", {"size": 20, "bold": True, "color": ACCENT}),
+    ("11. 疑難排解", {"size": 20, "bold": True, "color": ACCENT}),
+    ("12. 完整移除", {"size": 20, "bold": True, "color": ACCENT}),
 ])
 
 # ── Slide 3: Prerequisites table ──
@@ -474,22 +476,19 @@ make_section_slide(5, "安裝 Git Hooks")
 
 # ── Slide 14: Hook installation ──
 make_content_slide("5. 安裝 Git Hooks（全平台通用）", [
-    ("方式一：Template Hooks（推薦，適合團隊）", {"size": 18, "bold": True, "color": ACCENT2}),
-    ("$ ai-review hook install --template", {"size": 14, "color": ACCENT2, "indent": 1}),
-    ("$ cd /path/to/repo && git init      # 既有 repo 需重新初始化", {"size": 14, "color": ACCENT2, "indent": 1}),
-    ("$ ai-review hook enable              # 啟用（per-repo opt-in）", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("方式一：Template Hooks（推薦）", {"size": 18, "bold": True, "color": ACCENT2}),
+    ("$ ai-review hook install --template    # 一次性全域設定", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("$ cd /path/to/repo", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("$ ai-review hook enable                # 自動設定 + 安裝 hooks", {"size": 14, "color": ACCENT2, "indent": 1}),
     ("", {"size": 8}),
-    ("方式二：Global Hooks（所有 repo 共用）", {"size": 18, "bold": True, "color": ACCENT3}),
-    ("$ ai-review hook install --global", {"size": 14, "color": ACCENT3, "indent": 1}),
-    ("$ cd /path/to/repo && touch .ai-review   # marker 檔案", {"size": 14, "color": ACCENT3, "indent": 1}),
-    ("", {"size": 8}),
-    ("方式三：單一 Repo Hooks", {"size": 18, "bold": True, "color": WIN_CLR}),
-    ("$ ai-review hook install prepare-commit-msg", {"size": 14, "color": WIN_CLR, "indent": 1}),
-    ("$ ai-review hook install commit-msg", {"size": 14, "color": WIN_CLR, "indent": 1}),
-    ("$ touch .ai-review", {"size": 14, "color": WIN_CLR, "indent": 1}),
+    ("批量管理多個 Repo", {"size": 18, "bold": True, "color": ACCENT3}),
+    ("$ ai-review hook enable --all /workspace --list    # 預覽狀態", {"size": 14, "color": ACCENT3, "indent": 1}),
+    ("$ ai-review hook enable --all /workspace           # 全部啟用", {"size": 14, "color": ACCENT3, "indent": 1}),
+    ("$ ai-review hook enable --path /repo1 --path /repo2", {"size": 14, "color": ACCENT3, "indent": 1}),
+    ("$ ai-review hook disable --path /repo1             # 停用特定", {"size": 14, "color": ACCENT3, "indent": 1}),
     ("", {"size": 8}),
     ("確認狀態：ai-review hook status", {"size": 16, "bold": True, "color": WHITE}),
-])
+], note="hook enable 會同時設定 git config + 複製 hook 腳本到 .git/hooks/")
 
 # ── Slide 15: Hook types ──
 make_table_slide("5. Hook 類型說明",
@@ -545,14 +544,76 @@ make_content_slide("7. 互動式 Commit 助手", [
     ("所有選項最終都進入編輯器，讓你確認後才真正 commit", {"size": 16, "bold": True, "color": ACCENT2}),
 ])
 
-# ── Slide 20: Section - Commands ──
-make_section_slide(8, "常用指令速查表")
+# ── Slide 20: Section - Scenarios ──
+make_section_slide(8, "使用情境")
 
-# ── Slide 21: Section - Model Config ──
-make_section_slide("8", "更換/設定 LLM Model")
+# ── Slide 21: Scenario - Single dev ──
+make_content_slide("8. 情境一：個人開發者", [
+    ("一次性設定", {"size": 18, "bold": True, "color": ACCENT}),
+    ("$ pip install .", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("$ ai-review config set provider default ollama", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("$ ai-review config set ollama model llama3.2", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("$ ai-review hook enable", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("", {"size": 8}),
+    ("日常使用 — hooks 自動運作", {"size": 18, "bold": True, "color": ACCENT}),
+    ("$ git add main.py", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("$ git commit          → 互動選單自動出現", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("                      → 編輯器確認 message", {"size": 14, "color": GRAY, "indent": 2}),
+    ("                      → 格式自動檢查", {"size": 14, "color": GRAY, "indent": 2}),
+    ("$ git push            → pre-push AI 審查", {"size": 14, "color": ACCENT2, "indent": 1}),
+])
+
+# ── Slide 22: Scenario - Multi repo ──
+make_content_slide("8. 情境二：管理多個 Repo（BSP 團隊）", [
+    ("預覽所有 repo 狀態", {"size": 18, "bold": True, "color": ACCENT}),
+    ("$ ai-review hook enable --all /workspace --list", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("  camera-hal: disabled    audio-hal: disabled", {"size": 13, "color": GRAY, "indent": 1}),
+    ("  kernel: disabled        framework: disabled", {"size": 13, "color": GRAY, "indent": 1}),
+    ("", {"size": 8}),
+    ("批量啟用", {"size": 18, "bold": True, "color": ACCENT2}),
+    ("$ ai-review hook enable --all /workspace", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("", {"size": 6}),
+    ("啟用特定 repo", {"size": 18, "bold": True, "color": ACCENT3}),
+    ("$ ai-review hook enable --path /workspace/camera-hal \\", {"size": 14, "color": ACCENT3, "indent": 1}),
+    ("                        --path /workspace/kernel", {"size": 14, "color": ACCENT3, "indent": 1}),
+    ("", {"size": 6}),
+    ("停用特定 repo", {"size": 18, "bold": True, "color": WIN_CLR}),
+    ("$ ai-review hook disable --path /workspace/kernel", {"size": 14, "color": WIN_CLR, "indent": 1}),
+])
+
+# ── Slide 23: Scenario - Shared LLM ──
+make_content_slide("8. 情境三：團隊共用 LLM Server", [
+    ("架構", {"size": 18, "bold": True, "color": ACCENT}),
+    ("  開發機 A (Windows) ──→", {"size": 15, "color": WIN_CLR}),
+    ("  開發機 B (macOS)   ──→  LLM Server (192.168.1.100)", {"size": 15, "color": MAC_CLR}),
+    ("  開發機 C (Linux)   ──→  Ollama + GPU", {"size": 15, "color": LNX_CLR}),
+    ("", {"size": 10}),
+    ("Server 端（一次）", {"size": 18, "bold": True, "color": ACCENT3}),
+    ("$ sudo systemctl edit ollama", {"size": 14, "color": ACCENT3, "indent": 1}),
+    ("  加入 Environment=\"OLLAMA_HOST=0.0.0.0\"", {"size": 13, "color": GRAY, "indent": 1}),
+    ("$ sudo systemctl restart ollama", {"size": 14, "color": ACCENT3, "indent": 1}),
+    ("", {"size": 6}),
+    ("每台開發機（一次）", {"size": 18, "bold": True, "color": ACCENT2}),
+    ("$ ai-review config set ollama base_url http://192.168.1.100:11434", {"size": 14, "color": ACCENT2, "indent": 1}),
+    ("$ ai-review health-check", {"size": 14, "color": ACCENT2, "indent": 1}),
+])
+
+# ── Slide 24: Scenario - Commit choices ──
+make_table_slide("8. 情境四：Commit 互動選單怎麼選",
+    ["選項", "適合什麼時候", "說明"],
+    [
+        ["1 Load template", "忘了格式", "載入模板填寫"],
+        ["2 LLM optimize", "有草稿想潤飾", "AI 優化現有文字"],
+        ["3 LLM auto-generate", "懶得寫", "AI 看 diff 自動生成"],
+        ["s Skip", "自己寫", "直接進編輯器"],
+    ]
+)
+
+# ── Slide 25: Section - Model Config ──
+make_section_slide(9, "更換/設定 LLM Model")
 
 # ── Slide 22: Switch model ──
-make_content_slide("8. 切換 Model（全平台通用）", [
+make_content_slide("9. 切換 Model（全平台通用）", [
     ("下載新模型", {"size": 18, "bold": True, "color": ACCENT}),
     ("$ ollama pull llama3.2", {"size": 14, "color": ACCENT2, "indent": 1}),
     ("$ ollama pull llama3.1", {"size": 14, "color": ACCENT2, "indent": 1}),
@@ -568,7 +629,7 @@ make_content_slide("8. 切換 Model（全平台通用）", [
 ], note="小模型（3B）速度快但可能誤報 ｜ 大模型（7B+）品質好但較慢")
 
 # ── Slide 23: Model comparison ──
-make_table_slide("8. 模型比較",
+make_table_slide("9. 模型比較",
     ["模型", "參數量", "速度", "品質", "適用情境"],
     [
         ["llama3.2", "3.2B", "~8 秒", "中", "日常開發（推薦）"],
@@ -579,7 +640,7 @@ make_table_slide("8. 模型比較",
 )
 
 # ── Slide 24: Remote Ollama architecture ──
-make_content_slide("8. 遠端 Ollama Server 架構", [
+make_content_slide("9. 遠端 Ollama Server 架構", [
     ("多台開發機共用一台 LLM Server（同網域）", {"size": 18, "bold": True, "color": ACCENT}),
     ("", {"size": 6}),
     ("  開發機 A (Windows)  ──→", {"size": 15, "color": WIN_CLR}),
@@ -597,7 +658,7 @@ make_content_slide("8. 遠端 Ollama Server 架構", [
 ])
 
 # ── Slide 25: Remote server setup per platform ──
-make_3col_slide("8. Server 端設定 — 讓 Ollama 監聽所有網卡",
+make_3col_slide("9. Server 端設定 — 讓 Ollama 監聽所有網卡",
     [  # Windows
         "系統環境變數（永久）：",
         "  設定 > 系統 > 進階系統設定",
@@ -645,11 +706,11 @@ make_3col_slide("8. Server 端設定 — 讓 Ollama 監聽所有網卡",
     note="設定後驗證：curl http://<SERVER_IP>:11434/api/tags"
 )
 
-# ── Slide 26: Section - Commands ──
-make_section_slide(9, "常用指令速查表")
+# ── Slide 30: Section - Commands ──
+make_section_slide(10, "常用指令速查表")
 
-# ── Slide 27: Command reference ──
-make_table_slide("9. 設定與診斷指令",
+# ── Slide 26: Command reference ──
+make_table_slide("10. 設定與診斷指令",
     ["指令", "說明"],
     [
         ["ai-review config show", "顯示所有設定"],
@@ -663,25 +724,27 @@ make_table_slide("9. 設定與診斷指令",
     ]
 )
 
-# ── Slide 28: Hook commands ──
-make_table_slide("9. Hook 管理指令",
+# ── Slide 27: Hook commands ──
+make_table_slide("10. Hook 管理指令",
     ["指令", "說明"],
     [
         ["ai-review hook install --template", "安裝 template hooks（推薦）"],
         ["ai-review hook install --global", "安裝 global hooks"],
-        ["ai-review hook install <hook_type>", "安裝單一 repo hook"],
         ["ai-review hook uninstall --template", "移除 template hooks"],
         ["ai-review hook status", "查看 hook 安裝狀態"],
-        ["ai-review hook enable", "啟用當前 repo"],
-        ["ai-review hook disable", "停用當前 repo"],
+        ["ai-review hook enable", "啟用當前 repo（自動安裝 hooks）"],
+        ["hook enable --path <dir>", "啟用指定 repo（可重複）"],
+        ["hook enable --all <dir>", "批量啟用目錄下所有 repo"],
+        ["hook enable --all <dir> --list", "預覽所有 repo 狀態"],
+        ["hook disable --all <dir>", "批量停用"],
     ]
 )
 
-# ── Slide 29: Section - Troubleshooting ──
-make_section_slide(10, "疑難排解")
+# ── Slide 28: Section - Troubleshooting ──
+make_section_slide(11, "疑難排解")
 
-# ── Slide 30: Common issues ──
-make_table_slide("10. 全平台通用問題",
+# ── Slide 29: Common issues ──
+make_table_slide("11. 全平台通用問題",
     ["問題", "解法"],
     [
         ["command not found", "確認 pip Scripts 目錄在 PATH 中"],
@@ -694,7 +757,7 @@ make_table_slide("10. 全平台通用問題",
 )
 
 # ── Slide 31: Platform-specific issues ──
-make_3col_slide("10. 平台專屬問題",
+make_3col_slide("11. 平台專屬問題",
     [  # Windows
         "單引號 commit 失敗",
         "→ 用雙引號",
@@ -732,10 +795,10 @@ make_3col_slide("10. 平台專屬問題",
 )
 
 # ── Slide 32: Section - Uninstall ──
-make_section_slide(11, "完整移除")
+make_section_slide(12, "完整移除")
 
 # ── Slide 33: Uninstall ──
-make_3col_slide("11. 完整移除",
+make_3col_slide("12. 完整移除",
     [  # Windows
         "移除 hooks：",
         "$ ai-review hook uninstall \\",
@@ -792,7 +855,7 @@ make_title_slide(
 
 # ── Save ──
 import os
-out_dir = r"C:\Users\jame4\Desktop\PROJECT\260305_ai-code-review\ai-code-review\docs"
+out_dir = os.path.dirname(os.path.abspath(__file__))
 out_path = os.path.join(out_dir, "SOP-cross-platform.pptx")
 prs.save(out_path)
 print(f"PPT saved to: {out_path}")

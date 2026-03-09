@@ -14,10 +14,11 @@
 5. [安裝 Git Hooks](#五安裝-git-hooks)
 6. [日常使用流程](#六日常使用流程)
 7. [互動式 Commit 助手](#七互動式-commit-助手)
-8. [更換/設定 LLM Model](#八更換設定-llm-model)
-9. [常用指令速查表](#九常用指令速查表)
-10. [疑難排解](#十疑難排解)
-11. [完整移除](#十一完整移除)
+8. [使用情境](#八使用情境)
+9. [更換/設定 LLM Model](#九更換設定-llm-model)
+10. [常用指令速查表](#十常用指令速查表)
+11. [疑難排解](#十一疑難排解)
+12. [完整移除](#十二完整移除)
 
 ---
 
@@ -280,42 +281,60 @@ ai-review config set review include_extensions "c,cpp,h,hpp,java,py,json"
 
 ## 五、安裝 Git Hooks
 
-### 方式一：Template Hooks（推薦，適合團隊）
+### 方式一：Template Hooks（推薦）
 
 ```bash
-# 安裝（全域設定 init.templateDir）
+# 一次性全域設定
 ai-review hook install --template
 
-# 既有 repo 需重新初始化以獲取 hooks
+# 啟用 repo（clone 後直接執行，不需 git init）
 cd /path/to/your-repo
-git init                       # 安全操作，不會覆蓋現有資料
-
-# 啟用 AI review（per-repo opt-in）
-ai-review hook enable
+ai-review hook enable              # 自動設定 config + 安裝 hooks
 ```
 
-### 方式二：Global Hooks（所有 repo 共用）
+`hook enable` 會同時做兩件事：
+1. 設定 `git config --local ai-review.enabled true`
+2. 複製 4 個 hook 腳本到 `.git/hooks/`
+
+### 方式二：Global Hooks
 
 ```bash
-# 安裝
 ai-review hook install --global
 
-# 在需要的 repo 中建立 marker 檔案
 cd /path/to/your-repo
-touch .ai-review               # 有此檔案才會觸發 hooks
+touch .ai-review                   # 有此檔案才會觸發 hooks
 ```
 
 ### 方式三：單一 Repo Hooks
 
 ```bash
 cd /path/to/your-repo
-
-# 安裝特定 hook
 ai-review hook install prepare-commit-msg
 ai-review hook install commit-msg
-
-# 建立 marker 檔案
 touch .ai-review
+```
+
+### 批量管理多個 Repo
+
+```bash
+# 預覽目錄下所有 repo 狀態
+ai-review hook enable --all /workspace --list
+# 輸出：
+#   camera-hal: disabled
+#   audio-hal: enabled
+#   kernel: disabled
+
+# 批量啟用
+ai-review hook enable --all /workspace
+
+# 啟用指定 repo（不需 cd）
+ai-review hook enable --path /workspace/camera-hal --path /workspace/kernel
+
+# 批量停用
+ai-review hook disable --all /workspace
+
+# 停用指定 repo
+ai-review hook disable --path /workspace/kernel
 ```
 
 ### 確認安裝狀態
@@ -330,6 +349,17 @@ ai-review hook status
 > - 已安裝 **Git for Windows**（含 Git Bash）
 > - Hook 腳本中的 ai-review 路徑使用 Unix 格式：`/c/Users/<USER>/anaconda3/Scripts/ai-review.exe`
 > - 若自動偵測路徑失敗，可手動編輯 hook 腳本
+
+### Hook 類型說明
+
+| Hook | 觸發時機 | 功能 | 阻擋？ |
+|------|---------|------|--------|
+| `pre-commit` | `git commit` 最先 | AI 審查 staged 程式碼 | critical/error 時擋 |
+| `prepare-commit-msg` | 編輯器開啟前 | 互動式選單（模板/優化/自動生成） | 否 |
+| `commit-msg` | 編輯器關閉後 | 檢查 `[tag] description` 格式 | 格式錯時擋 |
+| `pre-push` | `git push` 前 | AI 審查所有待推送 commits | critical/error 時擋 |
+
+所有 hook 都帶 `--graceful`：LLM 連線失敗只警告，不阻擋操作。
 
 ---
 
@@ -346,6 +376,7 @@ git add main.py
 
 # 3. Commit（觸發 hooks）
 git commit
+# → pre-commit: AI 審查程式碼（有嚴重問題會擋下）
 # → prepare-commit-msg: 互動式選單出現
 # → 選完後編輯器開啟，確認 message
 # → commit-msg: 檢查格式
@@ -421,7 +452,125 @@ vim ~/.config/ai-code-review/commit-template.txt
 
 ---
 
-## 八、更換/設定 LLM Model
+## 八、使用情境
+
+### 情境一：個人開發者（一台機器，一個 repo）
+
+```bash
+# 安裝（一次性）
+pip install .
+ai-review config set provider default ollama
+ai-review config set ollama model llama3.2
+ai-review config init-template
+
+# 啟用（在 repo 裡）
+cd ~/my-project
+ai-review hook enable
+
+# 日常使用 — hooks 自動運作，不需額外操作
+git add main.py
+git commit                # ← 互動選單自動出現（選 1/2/3/s）
+                          # ← 編輯器開啟確認 message
+                          # ← commit-msg 自動檢查格式
+git push                  # ← pre-push AI 自動審查
+```
+
+### 情境二：管理多個 Repo（BSP / Android 團隊）
+
+```bash
+# 一次性設定
+ai-review hook install --template
+ai-review config set commit project_id "BSP"
+
+# 先看有哪些 repo
+ai-review hook enable --all /workspace --list
+# 輸出：
+#   camera-hal: disabled
+#   audio-hal: disabled
+#   kernel: disabled
+#   framework: disabled
+
+# 全部啟用
+ai-review hook enable --all /workspace
+# 輸出：
+#   Enabled: camera-hal
+#   Enabled: audio-hal
+#   ...
+#   4/4 repos enabled.
+
+# 只啟用特定幾個
+ai-review hook enable --path /workspace/camera-hal --path /workspace/kernel
+
+# 某個 repo 暫時不要 AI review
+ai-review hook disable --path /workspace/kernel
+```
+
+### 情境三：團隊共用 LLM Server
+
+```
+開發機 A (Windows)  ──→
+開發機 B (macOS)    ──→   LLM Server (192.168.1.100, GPU)
+開發機 C (Linux)    ──→   Ollama + llama3.2
+```
+
+```bash
+# Server 端（一次）
+sudo systemctl edit ollama
+# 加入 Environment="OLLAMA_HOST=0.0.0.0"
+sudo systemctl restart ollama
+
+# 每台開發機（一次）
+pip install .
+ai-review config set provider default ollama
+ai-review config set ollama base_url http://192.168.1.100:11434
+ai-review config set ollama model llama3.2
+ai-review health-check            # 驗證連線
+```
+
+### 情境四：Commit 時的互動選單
+
+```bash
+git add .
+git commit    # 不加 -m，自動出現選單
+```
+
+```
+Commit Message Assistant
+  1 Load template       - 載入模板
+  2 LLM optimize        - AI 優化已有文字
+  3 LLM auto-generate   - AI 自動生成
+  s Skip                - 跳過
+```
+
+| 選什麼 | 適合什麼時候 |
+|--------|-------------|
+| **1** | 忘了格式，載入模板填寫 |
+| **2** | 已經有草稿，讓 AI 潤飾 |
+| **3** | 懶得寫，AI 看 diff 自動生成 |
+| **s** | 自己寫，不需要 AI |
+
+> 選完後都會進編輯器讓你確認才 commit。
+
+```bash
+# 想跳過選單
+git commit -m "[fix] quick fix"         # -m 直接跳過選單
+
+# 想跳過所有 hooks
+git commit --no-verify -m "[hotfix] emergency"
+```
+
+### 情境五：手動 Code Review（不透過 hooks）
+
+```bash
+git add kernel/drivers/gpu/panel.c
+ai-review                              # terminal 彩色輸出
+ai-review --format markdown             # 貼到 Issue / PR
+ai-review --format json                 # CI/CD 整合
+```
+
+---
+
+## 九、更換/設定 LLM Model
 
 ### 8.1 切換 Model（全平台通用）
 
@@ -595,7 +744,7 @@ ai-review --provider openai --model gpt-4o
 
 ---
 
-## 九、常用指令速查表
+## 十、常用指令速查表
 
 ### 設定相關
 
@@ -616,8 +765,13 @@ ai-review --provider openai --model gpt-4o
 | `ai-review hook install commit-msg` | 安裝單一 repo hook |
 | `ai-review hook uninstall --template` | 移除 template hooks |
 | `ai-review hook status` | 查看 hook 安裝狀態 |
-| `ai-review hook enable` | 啟用當前 repo |
+| `ai-review hook enable` | 啟用當前 repo（自動安裝 hooks） |
+| `ai-review hook enable --path <dir>` | 啟用指定 repo（可重複） |
+| `ai-review hook enable --all <dir>` | 批量啟用目錄下所有 repo |
+| `ai-review hook enable --all <dir> --list` | 預覽所有 repo 狀態 |
 | `ai-review hook disable` | 停用當前 repo |
+| `ai-review hook disable --path <dir>` | 停用指定 repo |
+| `ai-review hook disable --all <dir>` | 批量停用 |
 
 ### 診斷
 
@@ -628,7 +782,7 @@ ai-review --provider openai --model gpt-4o
 
 ---
 
-## 十、疑難排解
+## 十一、疑難排解
 
 ### 全平台通用
 
@@ -667,7 +821,7 @@ ai-review --provider openai --model gpt-4o
 
 ---
 
-## 十一、完整移除
+## 十二、完整移除
 
 ### Windows
 
