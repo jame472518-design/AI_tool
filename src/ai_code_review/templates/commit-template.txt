@@ -1,4 +1,4 @@
-[tag] short description
+[tag][catagory] short description
 
 # ---- Commit Message Format ----
 # [tag] must be present. Examples:
