@@ -871,71 +871,180 @@ def hook_status() -> None:
         console.print("  [dim]not in a git repository[/]")
 
 
-@hook_group.command("enable")
-def hook_enable() -> None:
-    """Enable AI review for current repo (sets config + installs hooks)."""
+def _enable_single_repo(repo_path: Path, quiet: bool = False) -> bool:
+    """Enable AI review for a single repo. Returns True if successful."""
     import subprocess
 
-    try:
-        from .git import _run_git
-        _run_git("rev-parse", "--git-dir")
-    except (subprocess.CalledProcessError, OSError, GitError):
-        console.print("[bold red]Not in a git repository.[/]")
-        sys.exit(1)
+    git_dir = repo_path / ".git"
+    if not git_dir.is_dir():
+        if not quiet:
+            console.print(f"[bold red]Not a git repository: {repo_path}[/]")
+        return False
 
     # 1. Set git config flag
     subprocess.run(
-        ["git", "config", "--local", "ai-review.enabled", "true"],
+        ["git", "-C", str(repo_path), "config", "--local", "ai-review.enabled", "true"],
         check=True,
     )
-    console.print("[green]AI review enabled for this repo.[/]")
 
-    # 2. Copy hook scripts into .git/hooks/ so they work immediately
-    hooks_dir = _get_repo_hooks_dir()
+    # 2. Copy hook scripts into .git/hooks/
+    hooks_dir = git_dir / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
     hook_scripts = _generate_template_hook_scripts()
     installed = []
     for hook_type, script in hook_scripts.items():
         hook_path = hooks_dir / hook_type
         if hook_path.exists():
-            # Skip if already installed by ai-review
             try:
                 if "ai-review" in hook_path.read_text(encoding="utf-8"):
                     continue
             except (OSError, UnicodeDecodeError):
                 pass
-            # Skip if custom hook exists (don't overwrite user's hooks)
-            console.print(f"  [yellow]Skipped {hook_type}: existing hook found[/]")
+            if not quiet:
+                console.print(f"  [yellow]Skipped {hook_type}: existing hook found[/]")
             continue
         hook_path.write_text(script, encoding="utf-8")
         hook_path.chmod(0o755)
         installed.append(hook_type)
 
-    if installed:
-        console.print(f"  [green]Installed hooks: {', '.join(installed)}[/]")
-    else:
-        console.print("  [dim]All hooks already installed.[/]")
+    if not quiet:
+        console.print(f"[green]Enabled: {repo_path}[/]")
+        if installed:
+            console.print(f"  [green]Installed hooks: {', '.join(installed)}[/]")
+    return True
 
 
-@hook_group.command("disable")
-def hook_disable() -> None:
-    """Disable AI review for current repo (unsets git config --local)."""
+def _disable_single_repo(repo_path: Path, quiet: bool = False) -> bool:
+    """Disable AI review for a single repo. Returns True if successful."""
     import subprocess
 
-    try:
-        from .git import _run_git
-        _run_git("rev-parse", "--git-dir")
-    except (subprocess.CalledProcessError, OSError, GitError):
-        console.print("[bold red]Not in a git repository.[/]")
-        sys.exit(1)
+    git_dir = repo_path / ".git"
+    if not git_dir.is_dir():
+        if not quiet:
+            console.print(f"[bold red]Not a git repository: {repo_path}[/]")
+        return False
 
     try:
         subprocess.run(
-            ["git", "config", "--local", "--unset", "ai-review.enabled"],
+            ["git", "-C", str(repo_path), "config", "--local", "--unset", "ai-review.enabled"],
             check=True, capture_output=True,
         )
-        console.print("[green]AI review disabled for this repo.[/]")
+        if not quiet:
+            console.print(f"[green]Disabled: {repo_path}[/]")
+        return True
     except subprocess.CalledProcessError:
-        console.print("[dim]AI review was not enabled for this repo.[/]")
+        if not quiet:
+            console.print(f"[dim]Not enabled: {repo_path}[/]")
+        return False
+
+
+def _find_git_repos(root: Path) -> list[Path]:
+    """Find all git repos under root (non-recursive into nested .git)."""
+    repos = []
+    for item in sorted(root.iterdir()):
+        if not item.is_dir() or item.name.startswith("."):
+            continue
+        if (item / ".git").is_dir():
+            repos.append(item)
+        else:
+            # Search one more level for nested project structures
+            for sub in sorted(item.iterdir()):
+                if sub.is_dir() and (sub / ".git").is_dir():
+                    repos.append(sub)
+    return repos
+
+
+@hook_group.command("enable")
+@click.option("--path", "paths", multiple=True, type=click.Path(exists=True), help="Repo path(s) to enable (repeatable).")
+@click.option("--all", "scan_dir", type=click.Path(exists=True), help="Scan directory and enable all git repos found.")
+@click.option("--list", "list_only", is_flag=True, help="With --all: only list repos, don't enable.")
+def hook_enable(paths: tuple[str, ...], scan_dir: str | None, list_only: bool) -> None:
+    """Enable AI review for repo(s). Sets config + installs hooks.
+
+    \b
+    Examples:
+      ai-review hook enable                          # current repo
+      ai-review hook enable --path /path/to/repo     # specific repo
+      ai-review hook enable --path repo1 --path repo2
+      ai-review hook enable --all /workspace         # all repos under dir
+      ai-review hook enable --all /workspace --list  # preview repos
+    """
+    if scan_dir:
+        root = Path(scan_dir).resolve()
+        repos = _find_git_repos(root)
+        if not repos:
+            console.print(f"[yellow]No git repos found under: {root}[/]")
+            return
+        console.print(f"[bold]Found {len(repos)} repo(s) under {root}:[/]")
+        if list_only:
+            for r in repos:
+                # Check current status
+                enabled = _is_repo_enabled(r)
+                status = "[green]enabled[/]" if enabled else "[dim]disabled[/]"
+                console.print(f"  {r.name}: {status}")
+            return
+        count = 0
+        for r in repos:
+            if _enable_single_repo(r, quiet=True):
+                count += 1
+                console.print(f"  [green]Enabled: {r.name}[/]")
+        console.print(f"\n[bold green]{count}/{len(repos)} repos enabled.[/]")
+        return
+
+    if paths:
+        for p in paths:
+            _enable_single_repo(Path(p).resolve())
+        return
+
+    # Default: current directory
+    _enable_single_repo(Path.cwd())
+
+
+@hook_group.command("disable")
+@click.option("--path", "paths", multiple=True, type=click.Path(exists=True), help="Repo path(s) to disable (repeatable).")
+@click.option("--all", "scan_dir", type=click.Path(exists=True), help="Scan directory and disable all git repos found.")
+def hook_disable(paths: tuple[str, ...], scan_dir: str | None) -> None:
+    """Disable AI review for repo(s).
+
+    \b
+    Examples:
+      ai-review hook disable                         # current repo
+      ai-review hook disable --path /path/to/repo    # specific repo
+      ai-review hook disable --all /workspace        # all repos under dir
+    """
+    if scan_dir:
+        root = Path(scan_dir).resolve()
+        repos = _find_git_repos(root)
+        if not repos:
+            console.print(f"[yellow]No git repos found under: {root}[/]")
+            return
+        count = 0
+        for r in repos:
+            if _disable_single_repo(r, quiet=True):
+                count += 1
+                console.print(f"  [dim]Disabled: {r.name}[/]")
+        console.print(f"\n[bold]{count}/{len(repos)} repos disabled.[/]")
+        return
+
+    if paths:
+        for p in paths:
+            _disable_single_repo(Path(p).resolve())
+        return
+
+    _disable_single_repo(Path.cwd())
+
+
+def _is_repo_enabled(repo_path: Path) -> bool:
+    """Check if ai-review is enabled for a repo."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_path), "config", "--local", "ai-review.enabled"],
+            capture_output=True, text=True,
+        )
+        return result.stdout.strip() == "true"
+    except (subprocess.CalledProcessError, OSError):
+        return False
 
 
 def _install_global_hooks() -> None:
