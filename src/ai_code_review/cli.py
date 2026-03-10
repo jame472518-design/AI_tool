@@ -647,7 +647,13 @@ def config_init_template(force: bool) -> None:
     config = Config()
     config.set("commit", "template_file", str(dest))
     console.print(f"[green]Config set: commit.template_file = {dest}[/]")
-    console.print(f"[dim]Edit template: {dest}[/]")
+
+    # Guide user to edit the source template (editable install) or the config copy
+    if _src_file.exists():
+        console.print(f"[dim]Edit source template: {_src_file}[/]")
+        console.print("[dim]After editing, run: ai-review config init-template --force[/]")
+    else:
+        console.print(f"[dim]Edit template: {dest}[/]")
 
 
 def _print_config_section(name: str, data: dict) -> None:
