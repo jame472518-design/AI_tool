@@ -396,23 +396,41 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
         ).strip() or None
 
         if choice == "2":
-            # Feature 2: LLM optimize existing text
+            # Feature 2: LLM optimize — prompt per template field
             current = msg_path.read_text(encoding="utf-8").strip()
             current = "\n".join(
                 line for line in current.splitlines() if not line.startswith("#")
             ).strip()
             if not current:
-                console.print("[dim]Enter your draft message (press Enter twice to finish):[/]")
-                lines = []
-                try:
-                    while True:
-                        line = input()
-                        if line == "" and lines and lines[-1] == "":
-                            break
-                        lines.append(line)
-                except EOFError:
-                    pass
-                current = "\n".join(lines).strip()
+                # Parse template into fields and prompt each one
+                template_lines = [
+                    line for line in template_content.splitlines()
+                    if line.strip() and not line.startswith("#")
+                ]
+                if template_lines:
+                    console.print("[dim]Fill in each field (leave empty to skip):[/]")
+                    filled_lines = []
+                    try:
+                        for tline in template_lines:
+                            user_input = input(f"  {tline}: ")
+                            filled_lines.append(user_input.strip() if user_input.strip() else "")
+                    except (EOFError, KeyboardInterrupt):
+                        console.print("[yellow]Cancelled.[/]")
+                        return
+                    current = "\n".join(filled_lines).strip()
+                else:
+                    # No template — fallback to free-form input
+                    console.print("[dim]Enter your draft message (press Enter twice to finish):[/]")
+                    lines = []
+                    try:
+                        while True:
+                            line = input()
+                            if line == "" and lines and lines[-1] == "":
+                                break
+                            lines.append(line)
+                    except EOFError:
+                        pass
+                    current = "\n".join(lines).strip()
                 if not current:
                     console.print("[yellow]Empty draft, skipping.[/]")
                     return
