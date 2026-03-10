@@ -26,12 +26,31 @@ REVIEW_RESPONSE_SCHEMA = """Respond with a JSON array only. Each element:
 {"severity": "critical|error|warning|info", "file": "path", "line": number, "message": "description"}
 If no issues found, respond with []. No other text."""
 
-_COMMIT_IMPROVE_PROMPT = """\
+_COMMIT_IMPROVE_PROMPT_NO_TEMPLATE = """\
 You are a technical writing assistant. Given the original commit message and the git diff:
 1. Fix English grammar errors
 2. Make the description accurately reflect the code changes
 3. Keep it under 72 characters total
 4. Preserve the [PROJECT-NUMBER] prefix exactly as-is
+
+Respond with only the improved commit message. No explanation, no quotes.
+
+Original: {message}
+
+Diff:
+{diff}"""
+
+_COMMIT_IMPROVE_PROMPT_WITH_TEMPLATE = """\
+You are a technical writing assistant. Given the original commit message and the git diff, improve the message to follow the template format below.
+
+Template format:
+{template}
+
+Rules:
+1. Output MUST follow the template structure exactly — fill in each line of the template
+2. Make the description accurately reflect the code changes
+3. Preserve the [PROJECT-NUMBER] prefix exactly as-is if present
+4. Do NOT include lines starting with # (those are comments)
 
 Respond with only the improved commit message. No explanation, no quotes.
 
@@ -50,11 +69,13 @@ def get_review_prompt(custom_rules: str | None = None) -> str:
     )
 
 
-def get_commit_improve_prompt(message: str, diff: str) -> str:
-    return _COMMIT_IMPROVE_PROMPT.format(message=message, diff=diff)
+def get_commit_improve_prompt(message: str, diff: str, template: str | None = None) -> str:
+    if template:
+        return _COMMIT_IMPROVE_PROMPT_WITH_TEMPLATE.format(message=message, diff=diff, template=template)
+    return _COMMIT_IMPROVE_PROMPT_NO_TEMPLATE.format(message=message, diff=diff)
 
 
-_GENERATE_COMMIT_PROMPT = """\
+_GENERATE_COMMIT_PROMPT_NO_TEMPLATE = """\
 You are a technical writing assistant. Given the following git diff, generate a concise commit message description.
 
 Rules:
@@ -67,6 +88,23 @@ Rules:
 Diff:
 {diff}"""
 
+_GENERATE_COMMIT_PROMPT_WITH_TEMPLATE = """\
+You are a technical writing assistant. Given the following git diff, generate a commit message that follows the template format below.
 
-def get_generate_commit_prompt(diff: str) -> str:
-    return _GENERATE_COMMIT_PROMPT.format(diff=diff)
+Template format:
+{template}
+
+Rules:
+- Output MUST follow the template structure exactly — fill in each line of the template
+- Accurately describe what the code changes do
+- Do NOT include lines starting with # (those are comments)
+- Respond with only the commit message following the template. No explanation, no quotes.
+
+Diff:
+{diff}"""
+
+
+def get_generate_commit_prompt(diff: str, template: str | None = None) -> str:
+    if template:
+        return _GENERATE_COMMIT_PROMPT_WITH_TEMPLATE.format(diff=diff, template=template)
+    return _GENERATE_COMMIT_PROMPT_NO_TEMPLATE.format(diff=diff)

@@ -389,6 +389,12 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
         reviewer = Reviewer(provider=provider)
         project_id = config.get("commit", "project_id")
 
+        # Load template content (strip comment lines) for LLM prompt
+        template_content = _load_template(config)
+        template_for_llm = "\n".join(
+            line for line in template_content.splitlines() if not line.startswith("#")
+        ).strip() or None
+
         if choice == "2":
             # Feature 2: LLM optimize existing text
             current = msg_path.read_text(encoding="utf-8").strip()
@@ -413,7 +419,7 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
 
             with console.status(f"[bold cyan]AI optimizing... ({model_name})[/]"):
                 try:
-                    improved = reviewer.improve_commit_message(current, diff)
+                    improved = reviewer.improve_commit_message(current, diff, template=template_for_llm)
                 except ProviderError as e:
                     if graceful:
                         console.print(f"[yellow]Warning: LLM optimize failed — {rich_escape(str(e))}[/]")
@@ -436,7 +442,7 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
 
             with console.status(f"[bold cyan]AI generating... ({model_name})[/]"):
                 try:
-                    description = reviewer.generate_commit_message(diff)
+                    description = reviewer.generate_commit_message(diff, template=template_for_llm)
                 except ProviderError as e:
                     if graceful:
                         console.print(f"[yellow]Warning: LLM generate failed — {rich_escape(str(e))}[/]")

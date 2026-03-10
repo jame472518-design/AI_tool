@@ -12,11 +12,11 @@ class Reviewer:
         prompt = get_review_prompt(custom_rules)
         return self._provider.review_code(diff, prompt)
 
-    def improve_commit_message(self, message: str, diff: str) -> str:
-        return self._provider.improve_commit_msg(message, diff)
+    def improve_commit_message(self, message: str, diff: str, template: str | None = None) -> str:
+        return self._provider.improve_commit_msg(message, diff, template=template)
 
-    def generate_commit_message(self, diff: str) -> str:
-        return self._provider.generate_commit_msg(diff)
+    def generate_commit_message(self, diff: str, template: str | None = None) -> str:
+        return self._provider.generate_commit_msg(diff, template=template)
 
     def check_provider_health(self) -> tuple[bool, str]:
         return self._provider.health_check()

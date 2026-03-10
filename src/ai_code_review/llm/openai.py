@@ -25,12 +25,12 @@ class OpenAIProvider(LLMProvider):
         content = self._chat(full_prompt)
         return self._parse_review(content)
 
-    def improve_commit_msg(self, message: str, diff: str) -> str:
-        prompt = get_commit_improve_prompt(message, diff)
+    def improve_commit_msg(self, message: str, diff: str, template: str | None = None) -> str:
+        prompt = get_commit_improve_prompt(message, diff, template=template)
         return self._chat(prompt).strip()
 
-    def generate_commit_msg(self, diff: str) -> str:
-        prompt = get_generate_commit_prompt(diff)
+    def generate_commit_msg(self, diff: str, template: str | None = None) -> str:
+        prompt = get_generate_commit_prompt(diff, template=template)
         return self._chat(prompt).strip()
 
     def _chat(self, prompt: str) -> str:
