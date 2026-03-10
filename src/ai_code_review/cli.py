@@ -620,14 +620,19 @@ def config_init_template(force: bool) -> None:
     """Copy bundled commit template to config dir and set config."""
     import importlib.resources
 
-    # Prefer source tree template (editable install / dev clone), fallback to installed package
-    _src_dir = Path(__file__).resolve().parent / "templates"
-    _src_file = _src_dir / "commit-template.txt"
-    if _src_file.exists():
+    # Detect source tree: __file__ is under <project>/src/ai_code_review/cli.py
+    # so <project> = parent.parent.parent, check for pyproject.toml to confirm
+    _pkg_dir = Path(__file__).resolve().parent
+    _project_root = _pkg_dir.parent.parent
+    _is_source_tree = (_project_root / "pyproject.toml").exists()
+    _src_file = _pkg_dir / "templates" / "commit-template.txt"
+
+    if _is_source_tree and _src_file.exists():
         src = _src_file
     else:
         templates = importlib.resources.files("ai_code_review") / "templates"
         src = templates / "commit-template.txt"
+        _is_source_tree = False
     content = src.read_text(encoding="utf-8")
 
     # Write to config dir
@@ -648,8 +653,8 @@ def config_init_template(force: bool) -> None:
     config.set("commit", "template_file", str(dest))
     console.print(f"[green]Config set: commit.template_file = {dest}[/]")
 
-    # Guide user to edit the source template (editable install) or the config copy
-    if _src_file.exists():
+    # Guide user to edit the source template (source tree) or the config copy
+    if _is_source_tree:
         console.print(f"[dim]Edit source template: {_src_file}[/]")
         console.print("[dim]After editing, run: ai-review config init-template --force[/]")
     else:
