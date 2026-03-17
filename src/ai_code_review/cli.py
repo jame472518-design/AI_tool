@@ -10,10 +10,10 @@ from rich.console import Console
 from rich.markup import escape as rich_escape
 
 from .commit_check import check_commit_message
-from .config import DEFAULT_COMMIT_TEMPLATE_FILE, DEFAULT_INCLUDE_EXTENSIONS, DEFAULT_MAX_DIFF_LINES, Config
+from .config import DEFAULT_COMMIT_TEMPLATE_FILE, DEFAULT_GENERATE_PROMPT_FILE, DEFAULT_INCLUDE_EXTENSIONS, DEFAULT_MAX_DIFF_LINES, Config
 from .exceptions import ProviderError, ProviderNotConfiguredError
 from .formatters import format_json, format_markdown, format_terminal
-from .git import GitError, get_push_diff, get_staged_diff
+from .git import GitError, get_push_diff, get_staged_diff, get_staged_diff_stat, get_recent_commits
 from .llm.base import LLMProvider
 from .llm.enterprise import EnterpriseProvider
 from .llm.ollama import OllamaProvider
@@ -181,6 +181,16 @@ def check_commit(ctx: click.Context, message_file: str | None, auto_accept: bool
         sys.exit(1)
     console.print("[green]Commit message format OK.[/]")
 
+    # Show final commit message (after user editing)
+    if format_only and msg_path is not None:
+        final_msg = msg_path.read_text(encoding="utf-8").strip()
+        # Strip git comment lines
+        final_lines = [l for l in final_msg.splitlines() if not l.startswith("#")]
+        final_display = "\n".join(final_lines).strip()
+        if final_display:
+            console.print(f"[bold]Final commit message:[/]\n{rich_escape(final_display)}")
+        return
+
     # Step 2: AI improvement (only when we have a file to update and a provider)
     if format_only or msg_path is None:
         return
@@ -318,6 +328,29 @@ def _load_template(config: Config) -> str:
         pass
 
     return "[tag] description\n"
+
+
+def _load_generate_prompt(config: Config) -> str | None:
+    """Load custom generate prompt from config path, config dir, or package.
+
+    Returns the raw prompt text, or None to use built-in default.
+    """
+    import importlib.resources
+
+    # 1. Config-specified path
+    custom_path = config.get("commit", "generate_prompt_file")
+    if custom_path:
+        p = Path(custom_path).expanduser()
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+
+    # 2. Default config dir
+    default_path = Path.home() / ".config" / "ai-code-review" / DEFAULT_GENERATE_PROMPT_FILE
+    if default_path.exists():
+        return default_path.read_text(encoding="utf-8")
+
+    # 3. No custom prompt — use built-in default
+    return None
 
 
 def _parse_template_fields(template_content: str) -> list[dict]:
@@ -459,14 +492,15 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
     # Show interactive menu
     console.print("\n[bold]Commit Message Assistant[/]")
     console.print("  [bold cyan]1[/] Load template       - 載入模板")
-    console.print("  [bold cyan]2[/] LLM optimize        - AI 優化已有文字")
-    console.print("  [bold cyan]3[/] LLM auto-generate   - AI 自動生成")
+    console.print("  [bold cyan]2[/] Manual draft        - 輸入草稿 → AI 優化")
+    console.print("  [bold cyan]3[/] LLM interview       - AI 問你問題 → 生成")
+    console.print("  [bold cyan]4[/] LLM auto-generate   - AI 從 diff 自動生成")
     console.print("  [bold cyan]s[/] Skip                - 跳過，直接進編輯器")
 
     try:
         choice = click.prompt(
             "Choice",
-            type=click.Choice(["1", "2", "3", "s"], case_sensitive=False),
+            type=click.Choice(["1", "2", "3", "4", "s"], case_sensitive=False),
             default="s",
         )
     except (EOFError, click.Abort):
@@ -478,7 +512,7 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
         msg_path.write_text(template_content, encoding="utf-8")
         console.print("[green]Template loaded.[/]")
 
-    elif choice in ("2", "3"):
+    elif choice in ("2", "3", "4"):
         # Shared setup for LLM features
         cli_provider = ctx.obj.get("cli_provider") if ctx.obj else None
         cli_model = ctx.obj.get("cli_model") if ctx.obj else None
@@ -497,9 +531,7 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
         model_name = cli_model or config.get(provider_name, "model") or "default"
         console.print(f"[dim]Provider: {rich_escape(provider_name)} | Model: {rich_escape(model_name)}[/]")
 
-        ext_raw = config.get("review", "include_extensions")
-        if ext_raw is None:
-            ext_raw = DEFAULT_INCLUDE_EXTENSIONS
+        ext_raw = config.get("review", "include_extensions") or DEFAULT_INCLUDE_EXTENSIONS
         extensions = [e.strip() for e in ext_raw.split(",") if e.strip()] if ext_raw else None
 
         try:
@@ -517,19 +549,21 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
         ).strip() or None
 
         if choice == "2":
-            # Feature 2: LLM optimize — prompt per template field
-            current = msg_path.read_text(encoding="utf-8").strip()
-            current = "\n".join(
-                line for line in current.splitlines() if not line.startswith("#")
-            ).strip()
+            # Feature 2: Manual draft → LLM optimize with template
+            console.print("[dim]Enter your draft (press Enter twice to finish):[/]")
+            draft_lines = []
+            try:
+                while True:
+                    line = input()
+                    if line == "" and draft_lines and draft_lines[-1] == "":
+                        break
+                    draft_lines.append(line)
+            except EOFError:
+                pass
+            current = "\n".join(draft_lines).strip()
             if not current:
-                # Parse template into structured fields and prompt each one
-                current = _interactive_template_input(template_content)
-                if current is None:
-                    return
-                if not current:
-                    console.print("[yellow]Empty draft, skipping.[/]")
-                    return
+                console.print("[yellow]Empty draft, skipping.[/]")
+                return
 
             with console.status(f"[bold cyan]AI optimizing... ({model_name})[/]"):
                 try:
@@ -548,15 +582,96 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
                 console.print(f"[dim]Original:[/]  {rich_escape(current)}")
                 console.print(f"[green]Optimized:[/] {rich_escape(improved)}")
 
-        else:
-            # Feature 3: LLM auto-generate from diff
+        elif choice == "3":
+            # Feature 3: LLM interview — AI asks questions, user answers, AI generates
             if not diff:
                 console.print("[yellow]No staged changes found.[/]")
                 return
 
-            with console.status(f"[bold cyan]AI generating... ({model_name})[/]"):
+            with console.status(f"[bold cyan]AI analyzing diff... ({model_name})[/]"):
                 try:
-                    description = reviewer.generate_commit_message(diff, template=template_for_llm)
+                    questions_raw = reviewer.interview_questions(diff)
+                except ProviderError as e:
+                    if graceful:
+                        console.print(f"[yellow]Warning: LLM interview failed — {rich_escape(str(e))}[/]")
+                    else:
+                        console.print(f"[bold red]{rich_escape(str(e))}[/]")
+                    return
+
+            if not questions_raw:
+                console.print("[yellow]AI returned no questions, skipping.[/]")
+                return
+
+            # Display questions and collect answers
+            console.print(f"\n[bold]AI has questions about your changes:[/]")
+            questions = [q.strip() for q in questions_raw.splitlines() if q.strip()]
+            answers = []
+            try:
+                for q in questions:
+                    console.print(f"  [cyan]{q}[/]")
+                    ans = input("  → ").strip()
+                    answers.append(f"{q}\n  → {ans}" if ans else f"{q}\n  → (skipped)")
+            except (EOFError, KeyboardInterrupt):
+                console.print("[yellow]Cancelled.[/]")
+                return
+
+            answers_text = "\n".join(answers)
+
+            with console.status(f"[bold cyan]AI generating commit message... ({model_name})[/]"):
+                try:
+                    generated = reviewer.interview_generate(answers_text, diff, template=template_for_llm)
+                except ProviderError as e:
+                    if graceful:
+                        console.print(f"[yellow]Warning: LLM generate failed — {rich_escape(str(e))}[/]")
+                    else:
+                        console.print(f"[bold red]{rich_escape(str(e))}[/]")
+                    return
+
+            if generated and generated.strip():
+                if project_id and not generated.startswith("["):
+                    generated = f"[{project_id}] {generated}"
+                msg_path.write_text(generated + "\n", encoding="utf-8")
+                console.print(f"[green]Generated:[/]\n{rich_escape(generated)}")
+
+        else:
+            # Feature 4: Two-stage LLM auto-generate from diff
+            if not diff:
+                console.print("[yellow]No staged changes found.[/]")
+                return
+
+            # Gather extra context for Stage 1
+            try:
+                diff_stat = get_staged_diff_stat(extensions)
+            except GitError:
+                diff_stat = ""
+            try:
+                recent_commits = get_recent_commits(5)
+            except GitError:
+                recent_commits = ""
+
+            # Stage 1: Analyze
+            with console.status(f"[bold cyan]Stage 1: AI analyzing changes... ({model_name})[/]"):
+                try:
+                    summary = reviewer.analyze_diff(diff_stat, recent_commits, diff)
+                except ProviderError as e:
+                    if graceful:
+                        console.print(f"[yellow]Warning: LLM analyze failed — {rich_escape(str(e))}[/]")
+                    else:
+                        console.print(f"[bold red]{rich_escape(str(e))}[/]")
+                    return
+
+            if not summary:
+                console.print("[yellow]AI returned empty analysis, skipping.[/]")
+                return
+
+            console.print(f"[dim]Summary:[/]\n{rich_escape(summary)}\n")
+
+            # Stage 2: Generate from summary
+            generate_prompt = _load_generate_prompt(config)
+            with console.status(f"[bold cyan]Stage 2: AI generating commit message... ({model_name})[/]"):
+                try:
+                    description = reviewer.generate_commit_message_from_summary(
+                        summary, template=template_for_llm, custom_prompt=generate_prompt)
                 except ProviderError as e:
                     if graceful:
                         console.print(f"[yellow]Warning: LLM generate failed — {rich_escape(str(e))}[/]")
@@ -567,13 +682,19 @@ def prepare_interactive(ctx: click.Context, message_file: str, source: str, sha:
             if not description:
                 return
 
-            if project_id:
+            # Remove [none] tags (case-insensitive) and clean up extra spaces
+            import re
+            description = re.sub(r'\[none\]\s*', '', description, flags=re.IGNORECASE).strip()
+            # Clean up double spaces left after removal
+            description = re.sub(r'  +', ' ', description)
+
+            if project_id and not description.startswith("["):
                 message = f"[{project_id}] {description}"
             else:
                 message = description
 
             msg_path.write_text(message + "\n", encoding="utf-8")
-            console.print(f"[green]Generated: {rich_escape(message)}[/]")
+            console.print(f"[green]Generated:[/]\n{rich_escape(message)}")
 
     # choice == "s": do nothing, editor opens with default content
 
@@ -781,6 +902,48 @@ def config_init_template(force: bool) -> None:
         console.print(f"[dim]Edit template: {dest}[/]")
 
 
+@config_group.command("init-generate-prompt")
+@click.option("--force", is_flag=True, help="Overwrite existing generate prompt file.")
+def config_init_generate_prompt(force: bool) -> None:
+    """Copy bundled generate prompt to config dir and set config."""
+    import importlib.resources
+
+    _pkg_dir = Path(__file__).resolve().parent
+    _project_root = _pkg_dir.parent.parent
+    _is_source_tree = (_project_root / "pyproject.toml").exists()
+    _src_file = _pkg_dir / "templates" / "generate-prompt.txt"
+
+    if _is_source_tree and _src_file.exists():
+        src = _src_file
+    else:
+        templates = importlib.resources.files("ai_code_review") / "templates"
+        src = templates / "generate-prompt.txt"
+        _is_source_tree = False
+    content = src.read_text(encoding="utf-8")
+
+    dest_dir = Path.home() / ".config" / "ai-code-review"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / DEFAULT_GENERATE_PROMPT_FILE
+
+    if dest.exists() and not force:
+        console.print(f"[yellow]Generate prompt already exists: {dest}[/]")
+        console.print("[yellow]Use --force to overwrite.[/]")
+        return
+
+    dest.write_text(content, encoding="utf-8")
+    console.print(f"[green]Generate prompt copied to: {dest}[/]")
+
+    config = Config()
+    config.set("commit", "generate_prompt_file", str(dest))
+    console.print(f"[green]Config set: commit.generate_prompt_file = {dest}[/]")
+
+    if _is_source_tree:
+        console.print(f"[dim]Edit source prompt: {_src_file}[/]")
+        console.print("[dim]After editing, run: ai-review config init-generate-prompt --force[/]")
+    else:
+        console.print(f"[dim]Edit prompt: {dest}[/]")
+
+
 def _print_config_section(name: str, data: dict) -> None:
     console.print(f"[bold]{rich_escape('[' + name + ']')}[/]")
     for key, value in data.items():
@@ -794,19 +957,42 @@ _TEMPLATE_HOOKS_DIR = Path.home() / ".config" / "ai-code-review" / "template" / 
 
 
 def _resolve_ai_review_path() -> str:
-    """Find the absolute path to the ai-review executable."""
+    """Find the absolute path to the ai-review executable.
+
+    Returns a path suitable for use in bash hook scripts on all platforms.
+    On Windows, converts to POSIX-style path (e.g. /c/Users/...)
+    so Git Bash can execute it.
+    """
     import shutil
+
+    def _to_bash_path(p: str) -> str:
+        """Convert a native path to a bash-compatible path."""
+        if sys.platform == "win32":
+            # Convert 'C:\\Users\\...' → '/c/Users/...'
+            p = p.replace("\\", "/")
+            if len(p) >= 2 and p[1] == ":":
+                p = "/" + p[0].lower() + p[2:]
+        return p
 
     # 1. Check if ai-review is in PATH
     found = shutil.which("ai-review")
     if found:
-        return found
+        return _to_bash_path(found)
 
-    # 2. Check relative to this Python interpreter (venv/bin/)
+    # 2. Check relative to this Python interpreter
+    #    Linux/macOS venv: bin/ is same dir as python
+    #    Windows venv/conda: Scripts/ may be a subdirectory
     bin_dir = Path(sys.executable).parent
-    candidate = bin_dir / "ai-review"
-    if candidate.exists():
-        return str(candidate)
+    search_dirs = [bin_dir]
+    scripts_dir = bin_dir / "Scripts"
+    if scripts_dir.is_dir():
+        search_dirs.append(scripts_dir)
+
+    for d in search_dirs:
+        for name in ("ai-review", "ai-review.exe"):
+            candidate = d / name
+            if candidate.exists():
+                return _to_bash_path(str(candidate))
 
     return "ai-review"
 

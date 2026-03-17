@@ -30,6 +30,20 @@ def get_staged_diff(extensions: list[str] | None = None) -> str:
     return _run_git(*args).strip()
 
 
+def get_staged_diff_stat(extensions: list[str] | None = None) -> str:
+    """Return file change summary (git diff --cached --stat)."""
+    args = ["diff", "--cached", "--stat"]
+    if extensions:
+        args.append("--")
+        args.extend(f"*.{ext.lstrip('.')}" for ext in extensions)
+    return _run_git(*args).strip()
+
+
+def get_recent_commits(count: int = 5) -> str:
+    """Return recent commit oneline summaries."""
+    return _run_git("log", f"--oneline", f"-{count}").strip()
+
+
 def get_unstaged_diff() -> str:
     return _run_git("diff").strip()
 

@@ -18,5 +18,19 @@ class Reviewer:
     def generate_commit_message(self, diff: str, template: str | None = None) -> str:
         return self._provider.generate_commit_msg(diff, template=template)
 
+    def analyze_diff(self, diff_stat: str, recent_commits: str, diff: str) -> str:
+        return self._provider.analyze_diff(diff_stat, recent_commits, diff)
+
+    def generate_commit_message_from_summary(self, summary: str, template: str | None = None,
+                                              custom_prompt: str | None = None) -> str:
+        return self._provider.generate_commit_msg_from_summary(summary, template=template,
+                                                                custom_prompt=custom_prompt)
+
+    def interview_questions(self, diff: str) -> str:
+        return self._provider.interview_questions(diff)
+
+    def interview_generate(self, answers: str, diff: str, template: str | None = None) -> str:
+        return self._provider.interview_generate(answers, diff, template=template)
+
     def check_provider_health(self) -> tuple[bool, str]:
         return self._provider.health_check()

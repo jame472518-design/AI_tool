@@ -55,6 +55,19 @@ class LLMProvider(ABC):
     def generate_commit_msg(self, diff: str, template: str | None = None) -> str: ...
 
     @abstractmethod
+    def interview_questions(self, diff: str) -> str: ...
+
+    @abstractmethod
+    def interview_generate(self, answers: str, diff: str, template: str | None = None) -> str: ...
+
+    @abstractmethod
+    def analyze_diff(self, diff_stat: str, recent_commits: str, diff: str) -> str: ...
+
+    @abstractmethod
+    def generate_commit_msg_from_summary(self, summary: str, template: str | None = None,
+                                         custom_prompt: str | None = None) -> str: ...
+
+    @abstractmethod
     def health_check(self) -> tuple[bool, str]: ...
 
     def _parse_review(self, content: str) -> ReviewResult:

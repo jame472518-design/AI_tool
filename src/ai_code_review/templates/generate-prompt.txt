@@ -1,0 +1,37 @@
+You are a technical writing assistant. Given the change analysis below,
+generate a commit message that follows the template format.
+
+Change analysis:
+{summary}
+
+Template format:
+{template}
+
+Here is an example of a CORRECT output:
+
+[NEW][BSP][Sensor][JIRA-0002][NAL] fix camera crash on boot
+
+[IMPACT PROJECTS]
+camera_hal, sensor_service
+
+[DESCRIPTION]
+1. Fixed null pointer dereference in camera HAL initialization when sensor module returns empty config
+2. Added retry logic for sensor connection timeout during boot sequence
+3. Updated error handling to log detailed diagnostic info before failing
+
+[test]
+1. Verified camera boot sequence completes without crash on all supported devices
+2. Tested sensor reconnection after timeout with 10 retry cycles
+3. Confirmed no regression in camera capture performance
+
+Rules:
+- First line: replace ["..."] placeholders with actual values, all on ONE line
+- Section titles like [DESCRIPTION], [test], [IMPACT PROJECTS] must stay exactly as-is
+- [DESCRIPTION] and [test]: be detailed, list every change/test as numbered items
+- Remove [none] brackets entirely
+- Output ONLY the commit message, nothing else
+
+# ---- Generate Prompt Configuration ----
+# Available placeholders: {summary}, {template}
+# Lines starting with '#' are stripped before sending to LLM.
+# To reset: ai-review config init-generate-prompt --force
