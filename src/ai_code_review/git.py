@@ -14,6 +14,8 @@ def _run_git(*args: str) -> str:
             capture_output=True,
             text=True,
             check=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except subprocess.CalledProcessError as e:
         raise GitError(f"git {' '.join(args)} failed: {e.stderr.strip()}") from e
