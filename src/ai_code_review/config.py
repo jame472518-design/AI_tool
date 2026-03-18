@@ -21,8 +21,8 @@ DEFAULT_INCLUDE_EXTENSIONS = ""
 DEFAULT_MAX_DIFF_LINES = 2000
 
 # Default commit message format pattern and hint
-DEFAULT_COMMIT_PATTERN = r"^\[.+\] .+"
-DEFAULT_COMMIT_FORMAT_HINT = "Expected format: [tag] description  (e.g. [fix] resolve crash, [PROJ-1] add feature)"
+DEFAULT_COMMIT_PATTERN = r"^\[.+\](\[.+\])*\s*.+"
+DEFAULT_COMMIT_FORMAT_HINT = "Expected format: [tag] description  (e.g. [fix] resolve crash, [PROJ-1][BSP] add feature)"
 
 # Default commit template filename (inside config dir)
 DEFAULT_COMMIT_TEMPLATE_FILE = "commit-template.txt"
