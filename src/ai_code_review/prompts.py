@@ -47,11 +47,17 @@ REVIEW_RESPONSE_SCHEMA = """Respond with a JSON array only. Each element:
 If no issues found, respond with []. No other text."""
 
 _COMMIT_IMPROVE_PROMPT_NO_TEMPLATE = """\
-You are a technical writing assistant. Given the original commit message and the git diff:
-1. Fix English grammar errors
-2. Make the description accurately reflect the code changes
-3. Keep it under 72 characters total
-4. Preserve the [PROJECT-NUMBER] prefix exactly as-is
+You are a technical writing assistant. Given the original commit message and the git diff, \
+improve the text to be more professional and precise.
+
+Rules:
+1. Keep the same structure and intent — do NOT reorganize or reformat
+2. Make descriptions more precise, professional, and technically accurate based on the diff
+3. Fix grammar and spelling errors
+4. Replace vague words with specific technical terms (e.g. "fix stuff" → "resolve null pointer dereference")
+5. Add specific details from the diff (file names, function names, variable names) where helpful
+6. Keep first line under 72 characters
+7. Preserve [brackets] prefix exactly as-is
 
 Respond with only the improved commit message. No explanation, no quotes.
 
@@ -61,16 +67,20 @@ Diff:
 {diff}"""
 
 _COMMIT_IMPROVE_PROMPT_WITH_TEMPLATE = """\
-You are a technical writing assistant. Given the original commit message and the git diff, improve the message to follow the template format below.
+You are a technical writing assistant. Given the original commit message and the git diff, \
+improve the text to be more professional and precise while keeping the template structure.
 
 Template format:
 {template}
 
 Rules:
-1. Output MUST follow the template structure exactly — fill in each line of the template
-2. Make the description accurately reflect the code changes
-3. Preserve the [PROJECT-NUMBER] prefix exactly as-is if present
-4. Do NOT include lines starting with # (those are comments)
+1. Keep the SAME template structure — do NOT reorganize sections
+2. Make descriptions more precise, professional, and technically accurate based on the diff
+3. Replace vague words with specific technical terms
+4. Add specific details from the diff (file names, function names, variable names) where helpful
+5. [DESCRIPTION] and [test] sections — expand with more specific details from the diff
+6. Preserve [brackets] on the first line exactly as-is
+7. Do NOT include lines starting with # (those are comments)
 
 Respond with only the improved commit message. No explanation, no quotes.
 
